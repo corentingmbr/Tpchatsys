@@ -37,9 +37,11 @@ unsigned __stdcall handleClient(void* clientSocket) {
                 send(clients[i], buffer + 7, bytesReceived - 7, 0);
             }
         } else {
-            // Message d'un client, envoyez à tous les clients
+            // Message d'un client, envoyé à tous les clients
             for (int i = 0; i < numClients; ++i) {
-                send(clients[i], buffer, bytesReceived, 0);
+                char* messageCopy = strdup(buffer);
+                send(clients[i], messageCopy, bytesReceived, 0);
+                free(messageCopy);
             }
         }
     }
