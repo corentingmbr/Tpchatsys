@@ -55,12 +55,6 @@ build CMakeFiles/Tpchatsys.dir/main.c.obj: C_COMPILER__Tpchatsys_unscanned_Debug
   OBJECT_DIR = CMakeFiles\Tpchatsys.dir
   OBJECT_FILE_DIR = CMakeFiles\Tpchatsys.dir
 
-build CMakeFiles/Tpchatsys.dir/server.c.obj: C_COMPILER__Tpchatsys_unscanned_Debug C$:/Users/coren/OneDrive/Documents/GitHub/Tpchatsys/server.c || cmake_object_order_depends_target_Tpchatsys
-  DEP_FILE = CMakeFiles\Tpchatsys.dir\server.c.obj.d
-  FLAGS = -g -std=gnu11 -fdiagnostics-color=always
-  OBJECT_DIR = CMakeFiles\Tpchatsys.dir
-  OBJECT_FILE_DIR = CMakeFiles\Tpchatsys.dir
-
 
 # =============================================================================
 # Link build statements for EXECUTABLE target Tpchatsys
@@ -69,9 +63,9 @@ build CMakeFiles/Tpchatsys.dir/server.c.obj: C_COMPILER__Tpchatsys_unscanned_Deb
 #############################################
 # Link the executable Tpchatsys.exe
 
-build Tpchatsys.exe: C_EXECUTABLE_LINKER__Tpchatsys_Debug CMakeFiles/Tpchatsys.dir/main.c.obj CMakeFiles/Tpchatsys.dir/server.c.obj
+build Tpchatsys.exe: C_EXECUTABLE_LINKER__Tpchatsys_Debug CMakeFiles/Tpchatsys.dir/main.c.obj
   FLAGS = -g
-  LINK_LIBRARIES = -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
+  LINK_LIBRARIES = -lWs2_32  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\Tpchatsys.dir
   POST_BUILD = cd .
   PRE_LINK = cd .

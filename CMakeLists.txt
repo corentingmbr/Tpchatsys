@@ -3,5 +3,6 @@ project(Tpchatsys C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_executable(Tpchatsys main.c
-        server.c)
+add_executable(Tpchatsys main.c)
+
+target_link_libraries(Tpchatsys Ws2_32)

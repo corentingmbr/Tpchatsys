@@ -33,7 +33,7 @@ unsigned __stdcall handleClient(void* clientSocket) {
         if (strncmp(buffer, "~server", 7) == 0) {
             // Message spécial du serveur, ajoutez le préfixe et envoyez à tous les clients
             for (int i = 0; i < numClients; ++i) {
-                send(clients[i], "Server says:  ", 1024, 0);
+                send(clients[i], "Server says: ", 1024, 0);
                 send(clients[i], buffer + 7, bytesReceived - 7, 0);
             }
         } else {
