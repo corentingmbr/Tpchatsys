@@ -4,4 +4,4 @@ project(Tpchatsys C)
 set(CMAKE_C_STANDARD 11)
 
 add_executable(Tpchatsys main.c
-        ia.c)
+        server.c)
