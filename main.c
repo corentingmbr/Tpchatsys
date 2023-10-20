@@ -11,19 +11,63 @@ SOCKET clients[MAX_CLIENTS];
 int numClients = 0;
 
 CRITICAL_SECTION cs;
+typedef struct {
+    const char* login;
+    const char* password;
+} Credentials;
+
+Credentials allowedCredentials[MAX_CLIENTS] = {
+        {"user1", "pass1"},
+        {"user2", "pass2"},
+};
 
 DWORD WINAPI handleClient(void* clientSocket) {
     SOCKET clientSock = *(SOCKET*)clientSocket;
     char buffer[BUFFER_SIZE];
     int bytesReceived;
 
+    bytesReceived = recv(clientSock, buffer, sizeof(buffer) - 1, 0);
+    if (bytesReceived <= 0) {
+        printf("Client disconnected.\n");
+        closesocket(clientSock);
+        return 0;
+    }
+    buffer[bytesReceived] = '\0';
+    const char* receivedLogin = buffer;
+    printf("login: %s\n", receivedLogin);
+
+    bytesReceived = recv(clientSock, buffer, sizeof(buffer) - 1, 0);
+    if (bytesReceived <= 0) {
+        printf("Client disconnected.\n");
+        closesocket(clientSock);
+        return 0;
+    }
+    buffer[bytesReceived] = '\0';
+    const char* receivedPassword = buffer;
+    printf("Pass: %s\n", receivedPassword);
+
+    int validCredentials = 0;
+    for (int i = 0; i < MAX_CLIENTS; ++i) {
+        if (strcmp(receivedLogin, allowedCredentials[i].login) == 0 &&
+            strcmp(receivedPassword, allowedCredentials[i].password) == 0) {
+            validCredentials = 1;
+            break;
+        }
+    }
+    if (!validCredentials) {
+        printf("Invalid credentials. Disconnecting client.\n");
+        closesocket(clientSock);
+        return 0;
+    }
+
     while (1) {
-        bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
+        bytesReceived = recv(clientSock, buffer, sizeof(buffer) - 1, 0);
         if (bytesReceived <= 0) {
             printf("Client disconnected.\n");
             break;
         }
 
+        buffer[bytesReceived] = '\0';
         printf("Message received from client: %s\n", buffer);
 
         EnterCriticalSection(&cs);
@@ -84,7 +128,7 @@ int main() {
             numClients++;
             LeaveCriticalSection(&cs);
 
-            HANDLE thread_handle = CreateThread(NULL, 0, handleClient, &newSocket, 0, NULL);
+            HANDLE thread_handle = CreateThread(NULL, 0, handleClient, &clients[numClients - 1], 0, NULL);
             CloseHandle(thread_handle);
         } else {
             send(newSocket, "Server full. Please try again later.", BUFFER_SIZE, 0);
@@ -97,3 +141,4 @@ int main() {
     WSACleanup();
     return 0;
 }
+
