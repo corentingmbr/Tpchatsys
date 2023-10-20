@@ -79,7 +79,6 @@ int main() {
         newSocket = accept(sockfd, (struct sockaddr*)&clientAddr, &addr_size);
 
         if (numClients < MAX_CLIENTS) {
-            // Ajouter le client à la liste
             EnterCriticalSection(&cs);
             clients[numClients] = newSocket;
             numClients++;
