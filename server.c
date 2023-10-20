@@ -1,61 +1,55 @@
 #include <stdio.h>
 #include <winsock2.h>
 #include <process.h>
-#include <stdbool.h>
 
 #pragma comment(lib, "Ws2_32.lib")
 
-struct User {
-    char id[50];
-    char password[50];
-};
-
 #define MAX_CLIENTS 10
+#define BUFFER_SIZE 1024
 
-struct ClientInfo {
-    SOCKET socket;
-    char username[50];
-};
+SOCKET clients[MAX_CLIENTS];
+int numClients = 0;
 
-struct ClientInfo clients[MAX_CLIENTS];  // Tableau pour stocker les informations des clients
-int numClients = 0;  // Nombre actuel de clients
+CRITICAL_SECTION cs; // Pour synchroniser l'accès aux ressources partagées
 
-// Fonction pour gérer la communication avec un client
-unsigned __stdcall handleClient(void* clientInfo) {
-    struct ClientInfo* info = (struct ClientInfo*)clientInfo;
-    SOCKET clientSock = info->socket;
-    char buffer[1024];
+unsigned __stdcall handleClient(void* clientSocket) {
+    SOCKET clientSock = *(SOCKET*)clientSocket;
+    char buffer[BUFFER_SIZE];
     int bytesReceived;
-
-    // ... (Code d'authentification)
 
     while (1) {
         bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
         if (bytesReceived <= 0) {
-            printf("Client %s disconnected.\n", info->username);
-
-            // Retirer le client de la liste
-            for (int i = 0; i < numClients; ++i) {
-                if (clients[i].socket == clientSock) {
-                    // Déplacer les clients suivants vers le haut
-                    for (int j = i; j < numClients - 1; ++j) {
-                        clients[j] = clients[j + 1];
-                    }
-                    numClients--;
-                    break;
-                }
-            }
-
-            closesocket(clientSock);
-            _endthreadex(0);
-            return 0;
+            printf("Client disconnected.\n");
+            break;
         }
+
+        // Afficher le message reçu côté serveur
+        printf("Message received from client: %s\n", buffer);
+
+        // Synchronisation pour éviter les conflits lors de l'accès aux ressources partagées
+        EnterCriticalSection(&cs);
 
         // Envoyer le message à tous les clients connectés
         for (int i = 0; i < numClients; ++i) {
-            send(clients[i].socket, buffer, bytesReceived, 0);
+            send(clients[i], buffer, bytesReceived, 0);
+        }
+
+        LeaveCriticalSection(&cs);
+    }
+
+    // Retirer le client de la liste
+    EnterCriticalSection(&cs);
+    for (int i = 0; i < numClients; ++i) {
+        if (clients[i] == clientSock) {
+            for (int j = i; j < numClients - 1; ++j) {
+                clients[j] = clients[j + 1];
+            }
+            numClients--;
+            break;
         }
     }
+    LeaveCriticalSection(&cs);
 
     closesocket(clientSock);
     _endthreadex(0);
@@ -63,40 +57,52 @@ unsigned __stdcall handleClient(void* clientInfo) {
 }
 
 int main() {
-    // ... (Votre code existant)
+    InitializeCriticalSection(&cs);
+
+    WSADATA wsaData;
+    SOCKET sockfd, newSocket;
+    struct sockaddr_in serverAddr, clientAddr;
+    int addr_size;
+
+    WSAStartup(MAKEWORD(2, 2), &wsaData);
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    memset(&serverAddr, 0, sizeof(serverAddr));
+
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(4444);
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
+
+    bind(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+    listen(sockfd, 5);
+    addr_size = sizeof(clientAddr);
+
+    printf("Server listening on port 4444...\n");
 
     while (1) {
         newSocket = accept(sockfd, (struct sockaddr*)&clientAddr, &addr_size);
 
         if (numClients < MAX_CLIENTS) {
             // Ajouter le client à la liste
-            clients[numClients].socket = newSocket;
-            strcpy(clients[numClients].username, "Guest");  // Remplacez cela par le vrai nom d'utilisateur après l'authentification
+            EnterCriticalSection(&cs);
+            clients[numClients] = newSocket;
             numClients++;
+            LeaveCriticalSection(&cs);
 
             // Créer un thread pour gérer la communication avec le nouveau client
             unsigned threadID;
-            _beginthreadex(NULL, 0, &handleClient, &clients[numClients - 1], 0, &threadID);
+            _beginthreadex(NULL, 0, &handleClient, &newSocket, 0, &threadID);
         } else {
             // Trop de clients, refuser la connexion
-            send(newSocket, "Server full. Please try again later.", 1024, 0);
+            send(newSocket, "Server full. Please try again later.", BUFFER_SIZE, 0);
             closesocket(newSocket);
         }
     }
 
-    // ... (Votre code existant)
-
+    DeleteCriticalSection(&cs);
+    closesocket(sockfd);
+    WSACleanup();
     return 0;
 }
-
-
-
-
-
-
-
-
-
 
 
 

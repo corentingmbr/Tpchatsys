@@ -4,52 +4,40 @@
 
 #pragma comment(lib, "Ws2_32.lib")
 
-struct User {
-    char id[50];
-    char password[50];
-};
-
 #define MAX_CLIENTS 10
+#define BUFFER_SIZE 1024
 
 SOCKET clients[MAX_CLIENTS];
 int numClients = 0;
 
-unsigned __stdcall handleClient(void* clientSocket) {
+CRITICAL_SECTION cs;
+
+DWORD WINAPI handleClient(void* clientSocket) {
     SOCKET clientSock = *(SOCKET*)clientSocket;
-    char buffer[1024];
+    char buffer[BUFFER_SIZE];
     int bytesReceived;
 
     while (1) {
-        DWORD WINAPI thread(LPVOID lpParameter) {
-            send(clients,buffer, 1024, 0);
-        }
         bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
         if (bytesReceived <= 0) {
             printf("Client disconnected.\n");
             break;
         }
 
-        // Afficher le message reçu côté serveur
         printf("Message received from client: %s\n", buffer);
 
-        // Envoyer le message à tous les clients connectés
-        if (0 == strncmp(buffer, "~server", 7)) {
-            // Message spécial du serveur, ajoutez le préfixe et envoyez à tous les clients
-            for (int i = 0; i < numClients; ++i) {
-                send(clients[i], "Server says:  ", 1024, 0);
-                send(clients[i], buffer + 7, bytesReceived - 7, 0);
-            }
-        } else {
-            // Message d'un client, envoyé à tous les clients
-            for (int i = 0; i < numClients; ++i) {
-                char* messageCopy = strdup(buffer);
-                send(clients[i], messageCopy, bytesReceived, 0);
-                free(messageCopy);
+        EnterCriticalSection(&cs);
+
+        for (int i = 0; i < numClients; ++i) {
+            if (clients[i] != clientSock) {
+                send(clients[i], buffer, bytesReceived, 0);
             }
         }
+
+        LeaveCriticalSection(&cs);
     }
 
-    // Retirer le client de la liste
+    EnterCriticalSection(&cs);
     for (int i = 0; i < numClients; ++i) {
         if (clients[i] == clientSock) {
             for (int j = i; j < numClients - 1; ++j) {
@@ -59,16 +47,14 @@ unsigned __stdcall handleClient(void* clientSocket) {
             break;
         }
     }
+    LeaveCriticalSection(&cs);
 
     closesocket(clientSock);
-    _endthreadex(0);
     return 0;
 }
 
 int main() {
-    HANDLE thread_handle;
-    thread_handle = CreateThread(NULL, 0, thread, NULL, 0, NULL);
-    WaitForSingleObject(thread_handle, INFINITE);
+    InitializeCriticalSection(&cs);
 
     WSADATA wsaData;
     SOCKET sockfd, newSocket;
@@ -94,19 +80,20 @@ int main() {
 
         if (numClients < MAX_CLIENTS) {
             // Ajouter le client à la liste
+            EnterCriticalSection(&cs);
             clients[numClients] = newSocket;
             numClients++;
+            LeaveCriticalSection(&cs);
 
-            // Créer un thread pour gérer la communication avec le nouveau client
-            unsigned threadID;
-            _beginthreadex(NULL, 0, &handleClient, &newSocket, 0, &threadID);
+            HANDLE thread_handle = CreateThread(NULL, 0, handleClient, &newSocket, 0, NULL);
+            CloseHandle(thread_handle);
         } else {
-            // Trop de clients, refuser la connexion
-            send(newSocket, "Server full. Please try again later.", 1024, 0);
+            send(newSocket, "Server full. Please try again later.", BUFFER_SIZE, 0);
             closesocket(newSocket);
         }
     }
 
+    DeleteCriticalSection(&cs);
     closesocket(sockfd);
     WSACleanup();
     return 0;
