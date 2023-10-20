@@ -20,6 +20,9 @@ unsigned __stdcall handleClient(void* clientSocket) {
     int bytesReceived;
 
     while (1) {
+        DWORD WINAPI thread(LPVOID lpParameter) {
+            send(clients,buffer, 1024, 0);
+        }
         bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
         if (bytesReceived <= 0) {
             printf("Client disconnected.\n");
@@ -30,7 +33,7 @@ unsigned __stdcall handleClient(void* clientSocket) {
         printf("Message received from client: %s\n", buffer);
 
         // Envoyer le message à tous les clients connectés
-        if (strncmp(buffer, "~server", 7) == 0) {
+        if (0 == strncmp(buffer, "~server", 7)) {
             // Message spécial du serveur, ajoutez le préfixe et envoyez à tous les clients
             for (int i = 0; i < numClients; ++i) {
                 send(clients[i], "Server says:  ", 1024, 0);
@@ -63,6 +66,10 @@ unsigned __stdcall handleClient(void* clientSocket) {
 }
 
 int main() {
+    HANDLE thread_handle;
+    thread_handle = CreateThread(NULL, 0, thread, NULL, 0, NULL);
+    WaitForSingleObject(thread_handle, INFINITE);
+
     WSADATA wsaData;
     SOCKET sockfd, newSocket;
     struct sockaddr_in serverAddr, clientAddr;

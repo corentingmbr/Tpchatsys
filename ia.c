@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <winsock2.h>
 #include <process.h>
-#include <stdbool.h>
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -12,59 +11,56 @@ struct User {
 
 #define MAX_CLIENTS 10
 
-struct ClientInfo {
-    SOCKET socket;
-    char username[50];
-};
+SOCKET clients[MAX_CLIENTS];
+int numClients = 0;
+CRITICAL_SECTION cs; // Ajout d'un verrou pour la synchronisation des threads
 
-struct ClientInfo clients[MAX_CLIENTS];  // Tableau pour stocker les informations des clients
-int numClients = 0;  // Nombre actuel de clients
-
-// Fonction pour gérer la communication avec un client
-unsigned __stdcall handleClient(void* clientInfo) {
-    struct ClientInfo* info = (struct ClientInfo*)clientInfo;
-    SOCKET clientSock = info->socket;
+unsigned __stdcall handleClient(void* clientSocket) {
+    SOCKET clientSock = *(SOCKET*)clientSocket;
     char buffer[1024];
     int bytesReceived;
-
-    // Authentification
-    send(clientSock, "Enter your username: ", 50, 0);
-    recv(clientSock, buffer, sizeof(buffer), 0);
-    strcpy(info->username, buffer);
-
-    send(clientSock, "Enter your password: ", 50, 0);
-    recv(clientSock, buffer, sizeof(buffer), 0);
-
-    // Ajoutez vos propres mécanismes d'authentification ici
-    // ...
 
     while (1) {
         bytesReceived = recv(clientSock, buffer, sizeof(buffer), 0);
         if (bytesReceived <= 0) {
-            printf("Client %s disconnected.\n", info->username);
-
-            // Retirer le client de la liste
-            for (int i = 0; i < numClients; ++i) {
-                if (clients[i].socket == clientSock) {
-                    // Déplacer les clients suivants vers le haut
-                    for (int j = i; j < numClients - 1; ++j) {
-                        clients[j] = clients[j + 1];
-                    }
-                    numClients--;
-                    break;
-                }
-            }
-
-            closesocket(clientSock);
-            _endthreadex(0);
-            return 0;
+            printf("Client disconnected.\n");
+            break;
         }
+
+        // Afficher le message reçu côté serveur
+        printf("Message received from client: %s\n", buffer);
 
         // Envoyer le message à tous les clients connectés
-        for (int i = 0; i < numClients; ++i) {
-            send(clients[i].socket, buffer, bytesReceived, 0);
+        EnterCriticalSection(&cs); // Entrer dans la section critique
+        if (0 == strncmp(buffer, "~server", 7)) {
+            // Message spécial du serveur, ajoutez le préfixe et envoyez à tous les clients
+            for (int i = 0; i < numClients; ++i) {
+                send(clients[i], "Server says:  ", 1024, 0);
+                send(clients[i], buffer + 7, bytesReceived - 7, 0);
+            }
+        } else {
+            // Message d'un client, envoyé à tous les clients
+            for (int i = 0; i < numClients; ++i) {
+                char* messageCopy = strdup(buffer);
+                send(clients[i], messageCopy, bytesReceived, 0);
+                free(messageCopy);
+            }
+        }
+        LeaveCriticalSection(&cs); // Quitter la section critique
+    }
+
+    // Retirer le client de la liste
+    EnterCriticalSection(&cs);
+    for (int i = 0; i < numClients; ++i) {
+        if (clients[i] == clientSock) {
+            for (int j = i; j < numClients - 1; ++j) {
+                clients[j] = clients[j + 1];
+            }
+            numClients--;
+            break;
         }
     }
+    LeaveCriticalSection(&cs);
 
     closesocket(clientSock);
     _endthreadex(0);
@@ -72,6 +68,8 @@ unsigned __stdcall handleClient(void* clientInfo) {
 }
 
 int main() {
+    InitializeCriticalSection(&cs); // Initialiser le verrou
+
     WSADATA wsaData;
     SOCKET sockfd, newSocket;
     struct sockaddr_in serverAddr, clientAddr;
@@ -96,12 +94,14 @@ int main() {
 
         if (numClients < MAX_CLIENTS) {
             // Ajouter le client à la liste
-            clients[numClients].socket = newSocket;
+            EnterCriticalSection(&cs);
+            clients[numClients] = newSocket;
+            numClients++;
+            LeaveCriticalSection(&cs);
 
             // Créer un thread pour gérer la communication avec le nouveau client
             unsigned threadID;
-            _beginthreadex(NULL, 0, &handleClient, &clients[numClients], 0, &threadID);
-            numClients++;
+            _beginthreadex(NULL, 0, &handleClient, &newSocket, 0, &threadID);
         } else {
             // Trop de clients, refuser la connexion
             send(newSocket, "Server full. Please try again later.", 1024, 0);
@@ -109,6 +109,7 @@ int main() {
         }
     }
 
+    DeleteCriticalSection(&cs); // Supprimer le verrou
     closesocket(sockfd);
     WSACleanup();
     return 0;
